@@ -28,7 +28,7 @@ feats.forEach(f => {
 
 /* ---------- state ---------- */
 let horizon = pred.horizons_min[1] ?? pred.horizons_min[0];
-let threshold = 0.5, pos = 0, playing = false, speedIdx = 1, anim = null;
+let threshold = 0.5, mode = "top30", pos = 0, playing = false, speedIdx = 1, anim = null;
 const SPEEDS = [10, 60, 300];
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -70,10 +70,16 @@ function buildLayers(now) {
   const ph = (now * 2 * Math.PI) / 3200;
   const pulse = i => reduced ? 1 : 0.82 + 0.18 * Math.sin(ph + i * 1.7);
 
-  const hot = [];
-  for (const f of feats) {
-    f._p = P[f._i]; f._al = alertSet.has(f._i);
-    if (f._p != null && f._p >= threshold) hot.push(f);
+  for (const f of feats) { f._p = P[f._i]; f._al = alertSet.has(f._i); }
+  let hot;
+  if (mode === "top30") { // rank-based: glows == top-30 eval set; intensity vs step max
+    const scored = feats.filter(f => f._p != null).sort((a, b) => b._p - a._p);
+    const maxP = scored.length ? scored[0]._p : 1;
+    hot = scored.slice(0, 30);
+    for (const f of hot) f._g = maxP > 0 ? f._p / maxP : 0;
+  } else {
+    hot = feats.filter(f => f._p != null && f._p >= threshold);
+    for (const f of hot) f._g = f._p;
   }
 
   return { P, si, step, layers: [
@@ -83,15 +89,15 @@ function buildLayers(now) {
       getFillColor: f => f._p == null ? [150, 150, 160, 12]
         : [...probRGB(f._p), 6 + f._p * 66] }),
     new deck.GeoJsonLayer({ id: "glowF", data: hot, stroked: false, filled: true,
-      getFillColor: f => [...probRGB(f._p), 34 * f._p * pulse(f._i)] }),
+      getFillColor: f => [...probRGB(f._p), 42 * f._g * pulse(f._i)] }),
     new deck.GeoJsonLayer({ id: "glowL", data: hot, stroked: true, filled: false,
-      lineWidthMinPixels: 3,
-      getLineColor: f => [...probRGB(f._p), 52 * f._p * pulse(f._i)] }),
-    new deck.ColumnLayer({ id: "cols", data: hot, diskResolution: 16, radius: 6500,
+      lineWidthMinPixels: 4,
+      getLineColor: f => [...probRGB(f._p), 26 * f._g * pulse(f._i)] }),
+    new deck.ColumnLayer({ id: "cols", data: hot, diskResolution: 16, radius: 7000,
       extruded: true, material: false,
       getPosition: f => f._c,
-      getElevation: f => 25000 + 90000 * f._p,
-      getFillColor: f => [255, 238, 205, 24 * f._p * pulse(f._i)],
+      getElevation: f => 25000 + 90000 * f._g,
+      getFillColor: f => [255, 238, 205, 40 * f._g * pulse(f._i)],
       parameters: { blendColorOperation: "add", blendColorSrcFactor: "src-alpha",
         blendColorDstFactor: "one" } }),
     new deck.ScatterplotLayer({ id: "onsets",
@@ -113,7 +119,7 @@ function updatePanel(P, si) {
     .sort((a, b) => b.p - a.p).slice(0, 8);
   $("#list").innerHTML = rows.map(r => {
     const d = prev[r.i] != null ? r.p - prev[r.i] : 0;
-    const cls = d > 0.0005 ? "up" : d < -0.0005 ? "dn" : "";
+    const cls = d > 0.005 ? "up" : d < -0.005 ? "dn" : "";
     const txt = cls ? (d > 0 ? "+" : "−") + Math.abs(d).toFixed(2) : "·";
     return `<div class="row"><div class="nm">${pred.raions[r.i].name_ua}</div>` +
       `<div class="bar"><i style="width:${(r.p * 100).toFixed(1)}%"></i></div>` +
@@ -151,6 +157,12 @@ seg($("#spdSeg"), SPEEDS, SPEEDS[speedIdx], v => { speedIdx = SPEEDS.indexOf(v);
 [...$("#spdSeg").children].forEach((b, i) => b.textContent = SPEEDS[i] + "×");
 
 $("#play").onclick = () => setPlaying(!playing);
+seg($("#modeSeg"), ["top30", "thr"], mode, v => {
+  mode = v;
+  $("#thr").disabled = v !== "thr";
+});
+[...$("#modeSeg").children].forEach((b, i) => b.textContent = ["Top 30", "p ≥"][i]);
+$("#thr").disabled = true;
 $("#thr").oninput = e => { threshold = +e.target.value; $("#thrV").textContent = threshold.toFixed(2); };
 const scrub = $("#scrub");
 scrub.max = NS - 1;

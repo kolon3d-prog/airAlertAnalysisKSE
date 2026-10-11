@@ -6,7 +6,7 @@
   "train_rows": 496410,
   "val_rows": 27465,
   "val_pos_rate": 0.3160385945749135,
-  "train_seconds": 65.5
+  "train_seconds": 5.8
  },
  "30": {
   "best_iteration": 88,
@@ -15,7 +15,7 @@
   "train_rows": 631096,
   "val_rows": 35527,
   "val_pos_rate": 0.48672840374926113,
-  "train_seconds": 5.3
+  "train_seconds": 5.7
  },
  "60": {
   "best_iteration": 85,

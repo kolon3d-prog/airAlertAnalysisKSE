@@ -139,10 +139,11 @@ THREATS = [(t, re.compile(p)) for t, p in [
     ('mig31k',         r'м[іi]г[\s-]*31'),
     ('kab',            r'\bкаб\w{0,3}\b|авіаційн\w+\s+засоб|тактичн\w+\s+авіац'),
     ('cruise_missile', r'крилат|ракет|х-\d{2,3}|калібр'),
-    ('uav',            r'шахед|shahed|бпла|bpla|дрон|безпілотн|геран|мопед'),
+    ('uav',            r'шахед|shahed|бпла|bpla|дрон|безпілотн|геран|мопед|реактив'),
 ]]
+EMOJI_TT = {'🛵': 'uav', '☄': 'ballistic', '🚀': 'cruise_missile', '🛫': 'kab'}  # marker emoji -> type
 SKIP_RE = re.compile(r'відбій|знешкоджено|атакував\s+\d')  # all-clear / Air Force Report
-COUNT_RE = re.compile(r'(\d{1,3})\s*[xх×]?\s*(?:шахед\w*|дрон\w*|бпла|ракет\w*|каб\w*)')
+COUNT_RE = re.compile(r'(\d{1,3})\s*[xх×]?\s*(?:шахед\w*|дрон\w*|бпла|ракет\w*|каб\w*|грп\b)')
 BULLET = re.compile('^[🛵🚀🛸☄🛫🛬✈💥]\ufe0f?$')
 
 # ---------------------------------------------------------------- headings
@@ -202,6 +203,8 @@ def segments(text):
 def parse_segment(seg, raions, key2obl):
     low = ' '.join(norm(seg).split())
     tt = next((t for t, r in THREATS if r.search(low)), None)
+    if not tt:  # eRadarrua-style marker emoji without text keywords
+        tt = next((t for e, t in EMOJI_TT.items() if e in seg), None)
     if not tt:
         return None
     cities, rkeys, obls = [], set(), set()

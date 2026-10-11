@@ -81,12 +81,15 @@ body {
 
 /* threshold */
 .thr { display: flex; flex-direction: column; gap: 6px; }
+.thrrow { display: flex; align-items: center; gap: 10px; }
+.thrrow .cap2 { flex: none; }
+.thr input:disabled { opacity: 0.3; cursor: default; }
 
 /* ranked list */
 #list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 .row {
   display: grid;
-  grid-template-columns: 1fr 64px 34px 42px;
+  grid-template-columns: 1fr 50px 32px 40px;
   gap: 8px; align-items: center;
   padding: 5px 6px;
   border-radius: 8px;
@@ -173,6 +176,7 @@ input[type="range"]::-moz-range-thumb {
 }
 #scrub { flex: 1; }
 
+#err[hidden] { display: none; }
 #err {
   position: fixed; inset: 0; z-index: 50;
   display: grid; place-items: center;
@@ -181,7 +185,8 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .maplibregl-ctrl-attrib {
-  background: rgba(18, 18, 20, 0.5);
+  background: rgba(18, 18, 20, 0.55) !important;
   font-size: 10px;
+  opacity: 0.6;
 }
-.maplibregl-ctrl-attrib a { color: var(--dim); }
+.maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib a { color: var(--dim) !important; }
