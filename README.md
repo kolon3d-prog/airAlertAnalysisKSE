@@ -31,6 +31,8 @@ python -m http.server 8765 --directory web
 #      http://localhost:8765/?night=2026-06-20   (held-out validation night)
 ```
 
+Offline demo insurance: [reports/demo_replay.mp4](reports/demo_replay.mp4) (67 s, peak of the Dec 12→13 night). Screenshots: [docs/screenshots/](docs/screenshots/).
+
 ## Approach
 
 - **Target**: per-raion binary label — alert onset within horizon *h* ∈ {15, 30, 60} min — on a 5-min UTC grid. Official alerts are raion-level since late 2025; the modeling window is 2025-12-01 → 2026-09-07 (Vadimkin `official_data`).
