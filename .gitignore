@@ -6,7 +6,4 @@ data/telegram/
 data/cache/
 data/processed/
 models/
-web/data/predictions_*.json
-!web/data/predictions_demo.json
-
 .capture/
