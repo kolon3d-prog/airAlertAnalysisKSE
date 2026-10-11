@@ -210,6 +210,52 @@ input[type="range"]::-moz-range-thumb {
 }
 #scrub { flex: 1; }
 
+/* hover inspection card */
+#hover {
+  position: fixed; top: 0; left: 0; z-index: 30;
+  min-width: 190px; max-width: 250px;
+  padding: 11px 13px;
+  background: rgba(18, 18, 20, 0.6);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.15s ease-out;
+}
+#hover.on { opacity: 1; }
+#hover .ttl { display: flex; align-items: center; gap: 8px; }
+#hover .nm { font-weight: 600; font-size: 12.5px; }
+#hover .obl { color: var(--dim); font-size: 11px; margin-top: 1px; }
+.chip {
+  flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 2px 7px; border-radius: 20px;
+}
+.chip.al { background: rgba(255, 69, 58, 0.18); color: #ff6e5e; border: 1px solid rgba(255, 69, 58, 0.4); }
+.chip.pr { background: rgba(255, 214, 10, 0.14); color: #ffd60a; border: 1px solid rgba(255, 214, 10, 0.35); }
+.chip.qu { background: rgba(255, 255, 255, 0.08); color: var(--dim); border: 1px solid rgba(255, 255, 255, 0.12); }
+.chip.na { background: transparent; color: var(--faint); border: 1px dashed rgba(255, 255, 255, 0.18); }
+#hover .band { margin-top: 8px; font-size: 12px; }
+#hover .bars { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+#hover .brow {
+  display: grid; grid-template-columns: 22px 1fr 30px; gap: 8px; align-items: center;
+  font-size: 10.5px; color: var(--dim); font-variant-numeric: tabular-nums;
+}
+#hover .bbar { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+#hover .bbar i {
+  display: block; height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, #ffc46e, #ff5e3a);
+  transition: width 0.3s ease-out;
+}
+#hover .bval { text-align: right; }
+#hover .sigcap {
+  margin-top: 9px; font-size: 9px; font-weight: 600; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--faint);
+}
+#hover .sig { margin-top: 3px; font-size: 11px; color: var(--dim); }
+
 #err[hidden] { display: none; }
 #err {
   position: fixed; inset: 0; z-index: 50;

@@ -16,6 +16,13 @@ try {
   $("#err").textContent = `Could not load ${DATA_URL} — run the pipeline for that night, or open ?night=demo.`;
   throw new Error("data load failed");
 }
+// optional sidecars (hover card); page works without them
+const [adj, sig] = await Promise.all([
+  fetch("data/adjacency.json").then(r => r.ok ? r.json() : null).catch(() => null),
+  fetch(night === "demo" ? "data/signals_demo.json" : `data/signals_${night}.json`)
+    .then(r => r.ok ? r.json() : null).catch(() => null),
+]);
+const sigOK = sig && Array.isArray(sig.steps) && sig.steps.length === pred.steps.length;
 
 const NS = pred.steps.length, N = pred.raions.length;
 const key2i = new Map(pred.raions.map((r, i) => [r.key, i]));
@@ -28,13 +35,16 @@ feats.forEach(f => {
 const byI = new Map(feats.map(f => [f._i, f]));
 const ribFeats = rib.features.filter(f => key2i.has(f.properties.key));
 ribFeats.forEach(f => { f._f = byI.get(key2i.get(f.properties.key)); });
+// raions excluded from scoring: rendered as neutral hoverable outlines
+const extraFeats = geo.features.filter(f => !key2i.has(f.properties.key));
+extraFeats.forEach(f => { f._i = -1; });
 // flatten (Multi)Polygons into plain ring-arrays for SolidPolygonLayer
 const flatRows = features => features.flatMap(f => {
   const g = f.geometry;
   const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
   return polys.map(rings => ({ rings, _f: f._f ?? f }));
 });
-const allRows = flatRows(feats);
+const allRows = flatRows(feats).concat(flatRows(extraFeats));
 const ribRows = flatRows(ribFeats);
 const CITIES = [["Kyiv", 30.52, 50.45], ["Kharkiv", 36.23, 49.99], ["Odesa", 30.73, 46.48],
   ["Dnipro", 35.05, 48.46], ["Lviv", 24.03, 49.84]].map(([n, x, y]) => ({ n, c: [x, y] }));
@@ -73,7 +83,7 @@ map.fitBounds([[22.1, 44.2], [40.3, 52.4]], {
   padding: { top: 80, right: 300, bottom: 130, left: 50 },
   pitch: 50, bearing: -8, duration: reduced ? 0 : 1800,
 });
-const overlay = new deck.MapboxOverlay({ interleaved: true, layers: [] });
+const overlay = new deck.MapboxOverlay({ interleaved: true, layers: [], onHover });
 map.addControl(overlay);
 window.__map = map; // debug/test hooks
 window.__feats = feats;
@@ -96,14 +106,17 @@ const ADD = { blendColorOperation: "add", blendColorSrcFactor: "src-alpha",
   blendColorDstFactor: "one" };
 const ADD_FLAT = { ...ADD, depthTest: false };
 const NO_DEPTH = { depthTest: false };
-const COL_CUR_AL = [255, 90, 48, 100], COL_CUR_PR = [255, 214, 10, 78];
+const RGBA0 = [0, 0, 0, 0];
 const COL_B_AL = [255, 204, 51, 255], COL_B_PR = [255, 214, 10, 204], COL_B_IN = [44, 44, 46, 255];
 const COL_PIN = [255, 226, 90, 255], COL_PIN_GLOW = [255, 214, 10, 42];
 const EASE_OUT = t => 1 - Math.pow(1 - t, 3);
+// per-raion smoothing (runs at the 100ms rebuild bucket; ~400ms settle)
+const SMOOTH = reduced ? 1 : 1 - Math.exp(-0.1 / 0.16);
 
 // mutable anim state read by stable accessors
 const A = { now: 0, ph: 0 };
 const alertSet = new Set();
+let curAlertKeys = new Set();
 
 // SolidPolygonLayer with a per-fragment vertical gradient: alpha fades with
 // extrusion fraction vH (0 at ground -> 1 at top), caps (vH==1) vanish.
@@ -125,9 +138,12 @@ const getRings = d => d.rings;       // stable identity: keeps tessellation cach
 const pulseF = i => reduced ? 1 : 1 + 0.12 * Math.sin(A.ph + i * 1.7);
 const haloFill = d => [255, 69, 58, 13 * pulseF(d._f._i)];
 const haloLine = d => [255, 69, 58, 17 * pulseF(d._f._i)];
-const glowFill = d => [255, 69, 58, 32 * pulseF(d._f._i)];
-const curElev = d => CUR_H * (d._f._al ? 1.3 : 0.7 + 0.6 * (d._f._g || 0));
-const curCol = d => d._f._al ? COL_CUR_AL : COL_CUR_PR;
+const glowFill = d => d._f._al ? [255, 69, 58, 32 * pulseF(d._f._i)] : RGBA0;
+const curElev = d => CUR_H * (d._f._hs || 0);
+const curCol = d => { // gold -> red-orange mix by smoothed alertness
+  const a = d._f._as || 0;
+  return [255, 214 - 124 * a, 10 + 38 * a, 78 + 22 * a];
+};
 const bordCol = d => d._f._al ? COL_B_AL : d._f._hot ? COL_B_PR : COL_B_IN;
 const bordW = d => (d._f._al || d._f._hot) ? 1.5 : 1;
 const ripPhase = o => ((A.now + o) % 2000) / 2000;
@@ -150,6 +166,7 @@ function buildLayers(si, step, key) {
   const P = probsAt(horizon, pos);
   alertSet.clear();
   for (const i of step.alert) alertSet.add(i);
+  curAlertKeys = new Set(step.alert.map(i => pred.raions[i].key));
 
   for (const f of feats) { f._p = P[f._i]; f._al = alertSet.has(f._i); f._hot = false; }
   let hot;
@@ -164,26 +181,35 @@ function buildLayers(si, step, key) {
   }
   for (const f of hot) f._hot = true;
 
-  // cached sets: stable array identity between step changes
+  // smoothed per-raion curtain state: height factor + alertness (ease-out chase)
+  for (const f of feats) {
+    const hT = f._al ? 1.3 : f._hot ? 0.7 + 0.6 * f._g : 0;
+    f._hs = f._hs == null ? hT : f._hs + (hT - f._hs) * SMOOTH;
+    const aT = f._al ? 1 : 0;
+    f._as = f._as == null ? aT : f._as + (aT - f._as) * SMOOTH;
+  }
+
+  // cached sets: stable array identity between step changes; raions whose
+  // curtain is still draining stay in the set so departures sink smoothly
   const setKey = `${si}|${horizon}|${mode}|${mode === "thr" ? threshold : ""}`;
   if (setKey !== lastSetKey) {
     lastSetKey = setKey;
-    curtainSet = ribRows.filter(d => d._f._al || d._f._hot);
+    curtainSet = ribRows.filter(d => d._f._al || d._f._hot || (d._f._hs ?? 0) > 0.02);
     alertRows = allRows.filter(d => d._f._al);
   }
 
   const onsets = (step[`onset_${horizon}`] || []).map(i => pred.raions[i]);
   const rip = reduced ? [] : onsets.flatMap(r => [{ r, o: 0 }, { r, o: 1000 }]);
-  const UT = { getFillColor: key, getLineColor: key };
 
   const layers = [
     // ground halo (fake bloom bleed) + pulsing glow fill for alert raions
     new deck.PolygonLayer({ id: "halo", data: alertRows, getPolygon: getRings,
       filled: true, stroked: true, parameters: ADD,
       getFillColor: haloFill, getLineColor: haloLine,
-      getLineWidth: 9, lineWidthUnits: "pixels", updateTriggers: UT }),
-    new deck.PolygonLayer({ id: "glow", data: alertRows, getPolygon: getRings,
-      filled: true, stroked: false,
+      getLineWidth: 9, lineWidthUnits: "pixels",
+      updateTriggers: { getFillColor: key, getLineColor: key } }),
+    new deck.PolygonLayer({ id: "glow", data: allRows, getPolygon: getRings,
+      filled: true, stroked: false, pickable: true,
       getFillColor: glowFill, updateTriggers: { getFillColor: key } }),
     // volumetric curtain over the border ribbons of hot raions
     new CurtainLayer({ id: "curtain", data: curtainSet, getPolygon: getRings,
@@ -209,6 +235,83 @@ function buildLayers(si, step, key) {
     citiesLayer,
   ];
   return { P, hot, layers };
+}
+
+/* ---------- hover card ---------- */
+const hoverEl = $("#hover");
+let hoverF = null, hoverPt = [0, 0], hoverRaf = 0, hoverKey = "";
+let dragging = false, scrubbing = false, curSi = 0;
+
+function onHover(info) {
+  hoverF = info.object ? info.object._f : null;
+  hoverPt = [info.x, info.y];
+  if (!hoverRaf) hoverRaf = requestAnimationFrame(() => { hoverRaf = 0; renderHover(); });
+}
+map.on("dragstart", () => { dragging = true; renderHover(); });
+map.on("dragend", () => { dragging = false; renderHover(); });
+
+function bandText(p15, p30, p60) {
+  if (p15 == null && p30 == null && p60 == null) return null;
+  if ((p15 ?? 0) >= 0.5) return "likely within ~15 min";
+  if ((p30 ?? 0) >= 0.5) return "likely within 15–30 min";
+  if ((p60 ?? 0) >= 0.5) return "likely within 30–60 min";
+  if (Math.max(p15 ?? 0, p30 ?? 0, p60 ?? 0) >= 0.15) return "possible within 60 min";
+  return "low risk";
+}
+
+function renderHover() {
+  const f = hoverF;
+  if (!f || dragging || scrubbing) { hoverEl.classList.remove("on"); hoverKey = ""; return; }
+  const i = f._i;
+  const key = `${i}|${curSi}|${horizon}|${mode}`;
+  if (key !== hoverKey) {
+    hoverKey = key;
+    const r = i >= 0 ? pred.raions[i] : null;
+    const p15 = r ? pred.steps[curSi].pred["15"][i] : null;
+    const p30 = r ? pred.steps[curSi].pred["30"][i] : null;
+    const p60 = r ? pred.steps[curSi].pred["60"][i] : null;
+    const [chip, cls] = f._al ? ["On alert now", "al"]
+      : (!r || p30 == null) ? ["Not scored", "na"]
+      : f._hot ? ["Predicted", "pr"] : ["Quiet", "qu"];
+    const band = r ? bandText(p15, p30, p60) : null;
+    const bars = r && p30 != null ? [15, 30, 60].map(h => {
+      const p = pred.steps[curSi].pred[String(h)][i];
+      return `<div class="brow"><span>${h}</span><span class="bbar"><i style="width:` +
+        `${p == null ? 0 : (p * 100).toFixed(0)}%"></i></span>` +
+        `<span class="bval">${p == null ? "—" : p.toFixed(2)}</span></div>`;
+    }).join("") : "";
+    let sigRow = "";
+    if (adj || (sigOK && r)) {
+      const n = adj ? (adj[f.properties.key] || [])
+        .filter(k => curAlertKeys.has(k)).length : null;
+      const m = sigOK && r ? (sig.steps[curSi].tg[String(i)] ?? 0) : null;
+      if (n === 0 && m === 0) sigRow = "no active signals";
+      else {
+        const parts = [];
+        if (n !== null) parts.push(`neighbors in alert: ${n}`);
+        if (m !== null) parts.push(`OSINT reports (60 min): ${m}`);
+        let drv = "";
+        if (n !== null && m !== null) {
+          if (n > 0 && m === 0) drv = " · driver: cascade";
+          else if (n === 0 && m > 0) drv = " · driver: OSINT";
+          else if (n === 0 && m === 0) drv = "";
+        }
+        sigRow = parts.join(" · ") + drv;
+      }
+      sigRow = `<div class="sigcap">Live signals</div><div class="sig">${sigRow}</div>`;
+    }
+    hoverEl.innerHTML =
+      `<div class="ttl"><span class="nm">${r ? r.name_ua : f.properties.rayon}</span>` +
+      `<span class="chip ${cls}">${chip}</span></div>` +
+      (r && r.oblast_ua ? `<div class="obl">${r.oblast_ua}</div>` : "") +
+      (band ? `<div class="band">${band}</div>` : "") +
+      (bars ? `<div class="bars">${bars}</div>` : "") + sigRow;
+  }
+  const w = hoverEl.offsetWidth, h = hoverEl.offsetHeight;
+  const x = clamp(hoverPt[0] + 14, 8, innerWidth - w - 8);
+  const y = clamp(hoverPt[1] + 14, 8, innerHeight - h - 8);
+  hoverEl.style.transform = `translate(${x}px, ${y}px)`;
+  hoverEl.classList.add("on");
 }
 
 /* ---------- panel ---------- */
@@ -275,6 +378,8 @@ $("#thr").oninput = e => { threshold = +e.target.value; $("#thrV").textContent =
 const scrub = $("#scrub");
 scrub.max = NS - 1;
 scrub.oninput = () => { pos = +scrub.value; anim = null; };
+scrub.addEventListener("pointerdown", () => { scrubbing = true; renderHover(); });
+addEventListener("pointerup", () => { if (scrubbing) { scrubbing = false; renderHover(); } });
 
 addEventListener("keydown", e => {
   if (e.code === "Space") { e.preventDefault(); setPlaying(!playing); }
@@ -304,6 +409,7 @@ function tick(now) {
   A.now = now;
   A.ph = (now * 2 * Math.PI) / 3500;
   const si = clamp(Math.round(pos), 0, NS - 1);
+  curSi = si;
   // 100ms bucket drives pulse/ripple animation; under reduced motion the page
   // only re-renders on actual interaction (quantized pos)
   const bucket = reduced ? Math.round(pos * 8) : Math.floor(now / 100);
@@ -313,6 +419,7 @@ function tick(now) {
     const { P, hot, layers } = buildLayers(si, pred.steps[si], key);
     overlay.setProps({ layers });
     updatePanel(P, si, pred.steps[si], hot);
+    if (hoverF) renderHover();
   }
   if (document.activeElement !== scrub) scrub.value = pos;
   const d = new Date(pred.steps[si].t);
