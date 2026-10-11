@@ -52,6 +52,16 @@ Model A (history-only, shipped) vs baselines on the demo night — top-30 hit ra
 
 Validation night (2026-06-20) shows the same ordering (top-30: 0.861 / 0.777 / 0.657).
 
+**Latest period — 2026-10-08→09** (fully out-of-sample; training data ends 2026-09-07; [eval report](reports/eval_2026-10-08.md)):
+
+| horizon | Model A | persistence | climatology |
+|---|---|---|---|
+| 15 min | **0.870** / 0.165 | 0.420 / 0.042 | 0.502 / 0.047 |
+| 30 min | **0.810** / 0.248 | 0.424 / 0.074 | 0.517 / 0.092 |
+| 60 min | **0.673** / 0.340 | 0.447 / 0.148 | 0.492 / 0.175 |
+
+(top-30 hit / micro PR-AUC). Caveat: the 2026-09-07 → 10-08 history gap means trailing intensity features under-read early in the night. Replay it at `?night=2026-10-08`.
+
 **Ablation — Telegram features (Model B)**: no lift. Validation PR-AUC 0.747/0.825/0.889 vs 0.750/0.833/0.895 history-only; held-out nights comparable or slightly worse ([reports/metrics_telegram_ablation.json](reports/metrics_telegram_ablation.json)). National threat-event rate ranks top-10 by gain, but per-raion Telegram features (28% raion-resolved) add noise. Model A ships; the parsing pipeline remains for future work.
 
 ## Frontend

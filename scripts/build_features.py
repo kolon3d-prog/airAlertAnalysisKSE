@@ -16,6 +16,7 @@ import json
 import numpy as np
 import pandas as pd
 
+from build_dataset import merge_intervals
 from pipe_common import (DATA, HORIZONS, NEG_KEEP_P, NIGHTS, exclusion_window,
                          night_window, scored_raions)
 
@@ -61,6 +62,10 @@ def load_threat(path, kidx, t0):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--threat-events", default=None)
+    ap.add_argument("--intervals", nargs="+", default=[str(DATA / "alert_intervals.parquet")],
+                    help="interval parquets; concatenated + re-merged per raion (dedup overlap)")
+    ap.add_argument("--eval-only", action="store_true",
+                    help="write only eval_nights.parquet; leave train.parquet untouched")
     args = ap.parse_args()
 
     raions = scored_raions()
@@ -72,8 +77,11 @@ def main():
     # would saturate nb_in_alert / min_hops for every frontier raion)
     adj = {k: [kidx[n] for n in adj_raw.get(k, []) if n in kidx] for k in keys}
 
-    iv = pd.read_parquet(DATA / "alert_intervals.parquet")
+    iv = pd.concat([pd.read_parquet(p) for p in args.intervals], ignore_index=True)
     iv = iv[iv["raion_key"].isin(kidx)]
+    iv = pd.DataFrame([(k, s, e) for k, g in iv.groupby("raion_key")
+                       for s, e in merge_intervals(list(zip(g["started_at"], g["finished_at"])))],
+                      columns=["raion_key", "started_at", "finished_at"])
     t0 = pd.Timestamp("2025-12-01", tz="UTC")
     t_end = max(iv["started_at"].max(), iv["finished_at"].max()).floor("5min")
     n = int((t_end - t0).total_seconds() // 300) + 1
@@ -196,19 +204,23 @@ def main():
                     d[f"keep_{h}"] = keep[h][sel]
             return pd.DataFrame(d)
 
-        train_parts.append(frame(sel_tr, True))
+        if not args.eval_only:
+            train_parts.append(frame(sel_tr, True))
         eval_parts.append(frame(sel_ev, False))
 
-    train = pd.concat(train_parts, ignore_index=True)
     ev = pd.concat(eval_parts, ignore_index=True)
-    train.to_parquet(DATA / "train.parquet", index=False)
     ev.to_parquet(DATA / "eval_nights.parquet", index=False)
     print(f"grid: {n} steps x {R} raions = {n * R:,} raion-steps; grid end {t_end}")
-    for h in HORIZONS:
-        sub = train[train[f"keep_{h}"]]
-        pos = int(sub[f"y_{h}"].sum())
-        print(f"h={h}: train rows kept {len(sub):,}  pos {pos:,}  neg:pos {(len(sub) - pos) / max(pos, 1):.1f}")
-    print(f"train.parquet rows {len(train):,} (union of keep masks); eval_nights rows {len(ev):,}")
+    if not args.eval_only:
+        train = pd.concat(train_parts, ignore_index=True)
+        train.to_parquet(DATA / "train.parquet", index=False)
+        for h in HORIZONS:
+            sub = train[train[f"keep_{h}"]]
+            pos = int(sub[f"y_{h}"].sum())
+            print(f"h={h}: train rows kept {len(sub):,}  pos {pos:,}  neg:pos {(len(sub) - pos) / max(pos, 1):.1f}")
+        print(f"train.parquet rows {len(train):,} (union of keep masks); eval_nights rows {len(ev):,}")
+    else:
+        print(f"eval-only: train.parquet untouched; eval_nights rows {len(ev):,}")
 
 
 if __name__ == "__main__":

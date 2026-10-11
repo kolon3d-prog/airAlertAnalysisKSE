@@ -9,14 +9,19 @@ MODELS = ROOT / "models"
 REPORTS = ROOT / "reports"
 WEB = ROOT / "web" / "data"
 
-NIGHTS = ["2025-12-12", "2026-06-20"]
+NIGHTS = ["2025-12-12", "2026-06-20", "2026-10-08"]
+# non-default replay windows (UTC, end exclusive); others get 18:00 -> +14h
+NIGHT_WINDOWS = {"2026-10-08": ("2026-10-08 15:00", "2026-10-09 10:00")}
 HORIZONS = (15, 30, 60)
 NEG_KEEP_P = 0.05  # 20:1 negative downsampling
 META_COLS = ["t", "raion_idx", "y_15", "y_30", "y_60", "keep_15", "keep_30", "keep_60"]
 
 
 def night_window(night):
-    """Replay window 18:00 -> 08:00 UTC next day (end exclusive)."""
+    """Replay window (end exclusive). NIGHT_WINDOWS override; default 18:00 -> 08:00 UTC."""
+    if night in NIGHT_WINDOWS:
+        s, e = NIGHT_WINDOWS[night]
+        return pd.Timestamp(s, tz="UTC"), pd.Timestamp(e, tz="UTC")
     s = pd.Timestamp(night, tz="UTC") + pd.Timedelta(hours=18)
     return s, s + pd.Timedelta(hours=14)
 

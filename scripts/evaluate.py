@@ -22,6 +22,20 @@ from pipe_common import (DATA, HORIZONS, MODELS, NIGHTS, REPORTS,
 
 TOPK = 30
 
+# per-night caveats prepended to the eval report
+NOTES = {
+    "2026-10-08": (
+        "> **Caveat — history gap.** Training/history alert intervals end 2026-09-07; "
+        "Oct 8–9 intervals were appended from an external export "
+        "(data/raw/alerts_2026-10-09.csv). The 2026-09-07 → 2026-10-08 period is unobserved, "
+        "so state features saturate (minutes_since_last_end capped at 7d) and trailing-window "
+        "intensity features under-read for the first hours of the night. Telegram threat-event "
+        "features come from fresh eRadarRuA + kpszsu Oct scrapes, parsed regex-only like the "
+        "training data. Models were NOT retrained; climatology baseline is fit on the original "
+        "training window only."
+    ),
+}
+
 
 def climatology():
     """-> rate[raion_idx, kyiv_hour], onsets/hour, smoothed, training window only."""
@@ -89,7 +103,9 @@ def main():
         ws, we = night_window(night)
         sel = (ev["t"] >= ws) & (ev["t"] < we)
         metrics[night] = {}
-        lines = [f"# Eval {night} (18:00->08:00 UTC, held out)", ""]
+        lines = [f"# Eval {night} ({ws:%Y-%m-%d %H:%M} -> {we:%Y-%m-%d %H:%M} UTC, held out)", ""]
+        if night in NOTES:
+            lines += [NOTES[night], ""]
         for h in HORIZONS:
             y = ev.loc[sel, f"y_{h}"].to_numpy()
             t_s, r_s = ts[sel], ris[sel]
@@ -110,8 +126,11 @@ def main():
         out = REPORTS / f"eval_{night}.md"
         out.write_text("\n".join(lines), encoding="utf-8")
         print(f"wrote {out}")
-    with open(REPORTS / "metrics.json", "w", encoding="utf-8") as f:
-        json.dump(metrics, f, indent=1)
+    mpath = REPORTS / "metrics.json"
+    merged = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() else {}
+    merged.update(metrics)
+    with open(mpath, "w", encoding="utf-8") as f:
+        json.dump(merged, f, indent=1)
     print(json.dumps(metrics, indent=1))
 
 
