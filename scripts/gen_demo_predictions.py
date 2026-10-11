@@ -69,3 +69,16 @@ doc = {"night": NIGHT, "generated_at": "2026-10-11T12:00:00Z", "step_minutes": S
                 "top30_hit": {"15": 0.64, "30": 0.72, "60": 0.80}}}
 OUT.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 print(f"{OUT}  {OUT.stat().st_size/1e6:.2f} MB, {N} raions, {n_steps} steps")
+
+# signals_demo.json — synthetic OSINT report counts peaking near the wavefront
+pois = np.random.default_rng(11)
+tt = np.arange(n_steps)[:, None]           # steps
+dtau = tt - tau[None, :]                   # steps until onset (neg = during alert)
+lam = 5.0 * np.exp(-((dtau - 1.0) / 3.5) ** 2)  # peak just after onset
+counts = np.where(lam > 0.25, pois.poisson(lam), (pois.random((n_steps, N)) < 0.008).astype(int))
+sig_steps = [{"t": s["t"], "tg": {str(i): int(counts[t, i]) for i in np.flatnonzero(counts[t])}}
+             for t, s in enumerate(steps)]
+SIG = ROOT / "web" / "data" / "signals_demo.json"
+SIG.write_text(json.dumps({"steps": sig_steps}, ensure_ascii=False, separators=(",", ":")),
+               encoding="utf-8")
+print(f"{SIG}  {SIG.stat().st_size/1e3:.0f} KB")

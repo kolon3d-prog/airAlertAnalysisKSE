@@ -59,17 +59,18 @@ body {
 .sw { width: 12px; height: 12px; flex: none; }
 .sw.wall {
   width: 3px; height: 14px; margin: 0 4.5px; border-radius: 2px;
-  background: linear-gradient(180deg, rgba(255, 200, 120, 0.95), rgba(255, 200, 120, 0.05));
+  background: linear-gradient(0deg, rgba(255, 214, 10, 0.9), rgba(255, 214, 10, 0.04));
 }
 .sw.alert {
   border-radius: 3px;
-  background: rgba(255, 90, 60, 0.3);
-  border: 1px solid rgba(255, 120, 80, 0.65);
+  background: rgba(255, 69, 58, 0.25);
+  border: 1px solid rgba(255, 90, 48, 0.8);
 }
-.sw.ring {
-  width: 9px; height: 9px; margin: 0 1.5px;
+.sw.pin {
+  width: 7px; height: 7px; margin: 0 2.5px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  background: #ffd60a;
+  box-shadow: 0 0 6px rgba(255, 214, 10, 0.8);
 }
 .cap2 {
   font-size: 10px;
