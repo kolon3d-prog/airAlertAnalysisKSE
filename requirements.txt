@@ -1,0 +1,9 @@
+pandas
+pyarrow
+numpy
+requests
+beautifulsoup4
+lxml
+shapely
+lightgbm
+scikit-learn

@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+data/raw/
+data/telegram/
+data/cache/
+data/processed/
+models/
+web/data/predictions_*.json
+!web/data/predictions_demo.json
