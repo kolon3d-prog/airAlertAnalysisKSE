@@ -8,6 +8,7 @@ All times UTC. Rerunnable.
 """
 import json
 import re
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -21,6 +22,9 @@ EXCLUDE_DUTY = 0.50
 TOUCH_TOL_DEG = 1e-4  # ~10 m, for float-noisy shared boundaries
 # dataset key -> NEPTUN geojson key for raions renamed after the geojson was built
 KEY_ALIAS = {"звягельський": "новоград-волинський", "самарівський": "новомосковський"}
+
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Ukrainian names on cp1252 consoles
 
 
 def norm_apostrophe(s: str) -> str:

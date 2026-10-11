@@ -16,6 +16,7 @@ before that horizon). Overlapping intervals are merged per raion. Rerunnable.
 """
 import json
 import re
+import sys
 
 import pandas as pd
 
@@ -27,6 +28,9 @@ OUT = DATA / "alert_intervals_oct.parquet"
 KYIV = "Europe/Kyiv"
 NEW_SINCE = pd.Timestamp("2026-10-08", tz=KYIV)
 TS_FMT = "%d.%m.%Y, %H:%M:%S"
+
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Ukrainian names on cp1252 consoles
 
 CITY2RAION = {  # normalized "м. <name>" -> NEPTUN raion key (only what's needed)
     "м. нікополь": "нікопольський",
