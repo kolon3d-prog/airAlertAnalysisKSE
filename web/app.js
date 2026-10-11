@@ -110,11 +110,26 @@ const RGBA0 = [0, 0, 0, 0];
 const COL_B_AL = [255, 204, 51, 255], COL_B_PR = [255, 214, 10, 204], COL_B_IN = [44, 44, 46, 255];
 const COL_PIN = [255, 226, 90, 255], COL_PIN_GLOW = [255, 214, 10, 42];
 const EASE_OUT = t => 1 - Math.pow(1 - t, 3);
-// per-raion smoothing (runs at the 100ms rebuild bucket; ~400ms settle)
-const SMOOTH = reduced ? 1 : 1 - Math.exp(-0.1 / 0.16);
+// per-raion smoothing: dt-corrected exponential chase (~0.28s time constant)
+const TAU = 0.28;
+let chasing = true;                  // any curtain height/color still settling
+
+// memoized "on alert since" lookup: walk steps back while raion stays in alert
+const sinceCache = new Map();
+function alertSince(i, si) {
+  const key = i * NS + si;
+  let s = sinceCache.get(key);
+  if (s === undefined) {
+    s = si;
+    while (s > 0 && pred.steps[s - 1].alert.includes(i)) s--;
+    if (sinceCache.size > 4000) sinceCache.clear();
+    sinceCache.set(key, s);
+  }
+  return s;
+}
 
 // mutable anim state read by stable accessors
-const A = { now: 0, ph: 0 };
+const A = { now: 0, ph: 0, dtB: 0, lastB: 0 };
 const alertSet = new Set();
 let curAlertKeys = new Set();
 
@@ -182,12 +197,18 @@ function buildLayers(si, step, key) {
   for (const f of hot) f._hot = true;
 
   // smoothed per-raion curtain state: height factor + alertness (ease-out chase)
+  const k = reduced ? 1 : 1 - Math.exp(-A.dtB / TAU);
+  let rem = 0;
   for (const f of feats) {
     const hT = f._al ? 1.3 : f._hot ? 0.7 + 0.6 * f._g : 0;
-    f._hs = f._hs == null ? hT : f._hs + (hT - f._hs) * SMOOTH;
+    f._hs = f._hs == null ? hT : f._hs + (hT - f._hs) * k;
     const aT = f._al ? 1 : 0;
-    f._as = f._as == null ? aT : f._as + (aT - f._as) * SMOOTH;
+    f._as = f._as == null ? aT : f._as + (aT - f._as) * k;
+    const dH = Math.abs(hT - f._hs), dA = Math.abs(aT - f._as);
+    if (dH > rem) rem = dH;
+    if (dA > rem) rem = dA;
   }
+  chasing = rem > 0.002;
 
   // cached sets: stable array identity between step changes; raions whose
   // curtain is still draining stay in the set so departures sink smoothly
@@ -200,6 +221,7 @@ function buildLayers(si, step, key) {
 
   const onsets = (step[`onset_${horizon}`] || []).map(i => pred.raions[i]);
   const rip = reduced ? [] : onsets.flatMap(r => [{ r, o: 0 }, { r, o: 1000 }]);
+  const bKey = lastSetKey; // borders change only with state, not per frame
 
   const layers = [
     // ground halo (fake bloom bleed) + pulsing glow fill for alert raions
@@ -220,7 +242,7 @@ function buildLayers(si, step, key) {
     new deck.PolygonLayer({ id: "borders", data: allRows, getPolygon: getRings,
       filled: false, stroked: true, parameters: NO_DEPTH, lineWidthUnits: "pixels",
       getLineColor: bordCol, getLineWidth: bordW,
-      updateTriggers: { getLineColor: key, getLineWidth: key } }),
+      updateTriggers: { getLineColor: bKey, getLineWidth: bKey } }),
     // radar pins at onset centroids
     new deck.ScatterplotLayer({ id: "ripples", data: rip, stroked: true, filled: false,
       parameters: NO_DEPTH, radiusUnits: "meters", lineWidthMinPixels: 1.25,
@@ -273,13 +295,20 @@ function renderHover() {
     const [chip, cls] = f._al ? ["On alert now", "al"]
       : (!r || p30 == null) ? ["Not scored", "na"]
       : f._hot ? ["Predicted", "pr"] : ["Quiet", "qu"];
-    const band = r ? bandText(p15, p30, p60) : null;
-    const bars = r && p30 != null ? [15, 30, 60].map(h => {
+    let band = r ? bandText(p15, p30, p60) : null;
+    let bars = r && p30 != null ? [15, 30, 60].map(h => {
       const p = pred.steps[curSi].pred[String(h)][i];
       return `<div class="brow"><span>${h}</span><span class="bbar"><i style="width:` +
         `${p == null ? 0 : (p * 100).toFixed(0)}%"></i></span>` +
         `<span class="bval">${p == null ? "—" : p.toFixed(2)}</span></div>`;
     }).join("") : "";
+    if (f._al && r) { // onset probabilities are meaningless for active alerts
+      const d0 = new Date(pred.steps[alertSince(i, curSi)].t);
+      const mins = Math.max(0, Math.round((new Date(pred.steps[curSi].t) - d0) / 60000));
+      const dur = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
+      band = `On alert since ${pad(d0.getUTCHours())}:${pad(d0.getUTCMinutes())} UTC (${dur})`;
+      bars = "";
+    }
     let sigRow = "";
     if (adj || (sigOK && r)) {
       const n = adj ? (adj[f.properties.key] || [])
@@ -410,12 +439,17 @@ function tick(now) {
   A.ph = (now * 2 * Math.PI) / 3500;
   const si = clamp(Math.round(pos), 0, NS - 1);
   curSi = si;
-  // 100ms bucket drives pulse/ripple animation; under reduced motion the page
-  // only re-renders on actual interaction (quantized pos)
-  const bucket = reduced ? Math.round(pos * 8) : Math.floor(now / 100);
-  const key = `${si}|${horizon}|${mode}|${mode === "thr" ? threshold : ""}|${bucket}`;
+  // adaptive cadence: every frame while playing / stepping / curtain chase
+  // unsettled; otherwise a 100ms bucket (idle sleep under reduced motion)
+  const stateKey = `${si}|${horizon}|${mode}|${mode === "thr" ? threshold : ""}`;
+  const key = stateKey + "|" + (
+    (playing || anim || chasing) ? "f" + now
+    : reduced ? "p" + Math.round(pos * 8)
+    : "b" + Math.floor(now / 100));
   if (key !== lastKey) {
     lastKey = key;
+    A.dtB = Math.min(0.5, (now - (A.lastB || now)) / 1000);
+    A.lastB = now;
     const { P, hot, layers } = buildLayers(si, pred.steps[si], key);
     overlay.setProps({ layers });
     updatePanel(P, si, pred.steps[si], hot);
