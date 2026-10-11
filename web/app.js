@@ -25,6 +25,29 @@ feats.forEach(f => {
   const r = pred.raions[f._i];
   f._c = [r.lon, r.lat];
 });
+// resample exterior rings into evenly spaced wall points (~5 km apart, <=80/raion)
+function resample(ring, out) {
+  const STEP = 6, CAP = 80;
+  let next = STEP / 2, d = 0;
+  for (let i = 1; i < ring.length && out.length < CAP; i++) {
+    const [ax, ay] = ring[i - 1], [bx, by] = ring[i];
+    const len = Math.hypot((bx - ax) * 111 * Math.cos(ay * Math.PI / 180), (by - ay) * 111);
+    while (d + len >= next && out.length < CAP) {
+      const t = (next - d) / len;
+      out.push([ax + (bx - ax) * t, ay + (by - ay) * t]);
+      next += STEP;
+    }
+    d += len;
+  }
+}
+feats.forEach(f => {
+  const g = f.geometry;
+  const rings = g.type === "Polygon" ? [g.coordinates[0]] : g.coordinates.map(p => p[0]);
+  f._wall = [];
+  for (const r of rings) resample(r, f._wall);
+});
+const CITIES = [["Kyiv", 30.52, 50.45], ["Kharkiv", 36.23, 49.99], ["Odesa", 30.73, 46.48],
+  ["Dnipro", 35.05, 48.46], ["Lviv", 24.03, 49.84]].map(([n, x, y]) => ({ n, c: [x, y] }));
 
 /* ---------- state ---------- */
 let horizon = pred.horizons_min[1] ?? pred.horizons_min[0];
@@ -52,10 +75,6 @@ map.addControl(overlay);
 window.__map = map; // debug/test hook
 
 /* ---------- visuals ---------- */
-function probRGB(p) { // amber -> red
-  const t = Math.pow(clamp(p, 0, 1), 0.75);
-  return [lerp(255, 255, t) | 0, lerp(196, 94, t) | 0, lerp(110, 58, t) | 0];
-}
 function probsAt(h, x) { // linear interpolation between steps
   const i = clamp(Math.floor(x), 0, NS - 2), f = x - i;
   const a = pred.steps[i].pred[h], b = pred.steps[i + 1].pred[h];
@@ -82,22 +101,23 @@ function buildLayers(now) {
     for (const f of hot) f._g = f._p;
   }
 
-  return { P, si, step, layers: [
+  // walls: alert raions = red-amber (fill + wall), predicted hot = amber wall only
+  const walls = [];
+  for (const f of feats) if (f._al) for (const p of f._wall) walls.push({ p, g: 1, i: f._i, al: 1 });
+  for (const f of hot) if (!f._al) for (const p of f._wall) walls.push({ p, g: f._g, i: f._i, al: 0 });
+
+  return { P, si, step, hot, layers: [
     new deck.GeoJsonLayer({ id: "base", data: feats, stroked: true, filled: true,
       lineWidthMinPixels: 0.6,
-      getLineColor: f => f._al ? [255, 255, 255, 80] : [255, 255, 255, 22],
-      getFillColor: f => f._p == null ? [150, 150, 160, 12]
-        : [...probRGB(f._p), 6 + f._p * 66] }),
-    new deck.GeoJsonLayer({ id: "glowF", data: hot, stroked: false, filled: true,
-      getFillColor: f => [...probRGB(f._p), 42 * f._g * pulse(f._i)] }),
-    new deck.GeoJsonLayer({ id: "glowL", data: hot, stroked: true, filled: false,
-      lineWidthMinPixels: 4,
-      getLineColor: f => [...probRGB(f._p), 26 * f._g * pulse(f._i)] }),
-    new deck.ColumnLayer({ id: "cols", data: hot, diskResolution: 16, radius: 7000,
-      extruded: true, material: false,
-      getPosition: f => f._c,
-      getElevation: f => 25000 + 90000 * f._g,
-      getFillColor: f => [255, 238, 205, 40 * f._g * pulse(f._i)],
+      getLineColor: f => f._al ? [255, 120, 80, 110] : [255, 255, 255, 22],
+      getFillColor: f => f._al ? [255, 90, 60, 34] : [150, 150, 160, 8] }),
+    new deck.ColumnLayer({ id: "walls", data: walls, diskResolution: 10,
+      radius: 1100, extruded: true, material: false,
+      getPosition: d => d.p,
+      getElevation: d => d.al ? 28000 : 14000 + 34000 * d.g,
+      getFillColor: d => d.al
+        ? [255, 110, 70, 48 * pulse(d.i)]
+        : [255, 200, 120, 70 * d.g * pulse(d.i)],
       parameters: { blendColorOperation: "add", blendColorSrcFactor: "src-alpha",
         blendColorDstFactor: "one" } }),
     new deck.ScatterplotLayer({ id: "onsets",
@@ -105,15 +125,23 @@ function buildLayers(now) {
       stroked: true, filled: false, radiusUnits: "meters", getRadius: 10000,
       getPosition: d => [d.lon, d.lat],
       getLineColor: [255, 255, 255, 210], lineWidthMinPixels: 1.4 }),
+    new deck.TextLayer({ id: "cities", data: CITIES,
+      getPosition: d => d.c, getText: d => d.n,
+      getSize: 11, sizeUnits: "pixels", getColor: [255, 255, 255, 72],
+      fontFamily: "system-ui, sans-serif", fontWeight: 600,
+      outlineWidth: 2, outlineColor: [0, 0, 0, 130] }),
   ]};
 }
 
 /* ---------- panel ---------- */
 let lastKey = "";
-function updatePanel(P, si) {
+function updatePanel(P, si, step, hot) {
   const key = `${si}|${horizon}`;
   if (key === lastKey) return;
   lastKey = key;
+  const forecast = hot.filter(f => !f._al).length;
+  $("#status").textContent =
+    `${step.alert.length} raions on alert · ${forecast} predicted in next ${horizon} min`;
   const prev = pred.steps[Math.max(0, si - 1)].pred[horizon];
   const rows = P.map((p, i) => ({ p, i })).filter(r => r.p != null)
     .sort((a, b) => b.p - a.p).slice(0, 8);
@@ -193,9 +221,9 @@ function tick(now) {
     pos = anim.from + (anim.to - anim.from) * (1 - Math.pow(1 - k, 3));
     if (k >= 1) anim = null;
   }
-  const { P, si, step, layers } = buildLayers(now);
+  const { P, si, step, hot, layers } = buildLayers(now);
   overlay.setProps({ layers });
-  updatePanel(P, si);
+  updatePanel(P, si, step, hot);
   if (document.activeElement !== scrub) scrub.value = pos;
   const d = new Date(step.t);
   const clk = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
