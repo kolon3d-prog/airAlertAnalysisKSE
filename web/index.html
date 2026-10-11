@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Air Alert Replay</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="map"></div>
+
+<div id="brand" class="glass"><span class="cap">Air Alert Replay</span><span id="nightLbl"></span></div>
+
+<aside id="panel" class="glass">
+  <div class="cap">Raion Risk</div>
+  <div class="seg" id="horSeg"></div>
+  <div class="thr">
+    <span class="cap2">Glow ≥ <b id="thrV">0.50</b></span>
+    <input id="thr" type="range" min="0.2" max="0.9" step="0.05" value="0.5">
+  </div>
+  <div id="list"></div>
+  <div id="meta"></div>
+</aside>
+
+<div id="dock" class="glass">
+  <button id="play" aria-label="Play/Pause"></button>
+  <div class="seg" id="spdSeg"></div>
+  <div id="clock">--:-- UTC</div>
+  <input id="scrub" type="range" min="0" step="0.01" value="0">
+</div>
+
+<div id="err" hidden></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/deck.gl@8.9.36/dist.min.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

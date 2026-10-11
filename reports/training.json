@@ -1,0 +1,29 @@
+{
+ "15": {
+  "best_iteration": 247,
+  "val_pr_auc": 0.750260539425569,
+  "calibration_slope": 1.2260630045022465,
+  "train_rows": 496410,
+  "val_rows": 27465,
+  "val_pos_rate": 0.3160385945749135,
+  "train_seconds": 65.5
+ },
+ "30": {
+  "best_iteration": 88,
+  "val_pr_auc": 0.8331137624095935,
+  "calibration_slope": 1.3058459567122884,
+  "train_rows": 631096,
+  "val_rows": 35527,
+  "val_pos_rate": 0.48672840374926113,
+  "train_seconds": 5.3
+ },
+ "60": {
+  "best_iteration": 85,
+  "val_pr_auc": 0.8948180203033945,
+  "calibration_slope": 1.3395049409739583,
+  "train_rows": 888176,
+  "val_rows": 51424,
+  "val_pos_rate": 0.6564444617299315,
+  "train_seconds": 6.8
+ }
+}

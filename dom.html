@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="uk"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Air Alert Replay</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="map" class="maplibregl-map"><div class="maplibregl-canvas-container maplibregl-interactive maplibregl-touch-drag-pan maplibregl-touch-zoom-rotate"><canvas class="maplibregl-canvas" tabindex="0" aria-label="Map" role="region" width="764" height="485" style="width: 764px; height: 485px; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); outline: none; cursor: grab;"></canvas><div class="deck-tooltip" style="z-index: 1; position: absolute; pointer-events: none; color: rgb(160, 167, 180); background-color: rgb(41, 50, 60); padding: 10px; top: 0px; left: 0px; display: none;"></div></div><div class="maplibregl-control-container"><div class="maplibregl-ctrl-top-left "><div></div></div><div class="maplibregl-ctrl-top-right "></div><div class="maplibregl-ctrl-bottom-left "></div><div class="maplibregl-ctrl-bottom-right "><details class="maplibregl-ctrl maplibregl-ctrl-attrib maplibregl-compact maplibregl-compact-show" open=""><summary class="maplibregl-ctrl-attrib-button" title="Toggle attribution" aria-label="Toggle attribution"></summary><div class="maplibregl-ctrl-attrib-inner"><a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> <a href="https://www.openmaptiles.org/" target="_blank">© OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a></div></details></div></div></div>
+
+<div id="brand" class="glass"><span class="cap">Air Alert Replay</span><span id="nightLbl">demo night 2025-12-12</span></div>
+
+<aside id="panel" class="glass">
+  <div class="cap">Raion Risk</div>
+  <div class="seg" id="horSeg"><button>15</button><button class="on">30</button><button>60</button></div>
+  <div class="thr">
+    <span class="cap2">Glow ≥ <b id="thrV">0.50</b></span>
+    <input id="thr" type="range" min="0.2" max="0.9" step="0.05" value="0.5">
+  </div>
+  <div id="list"><div class="row"><div class="nm">Самбірський район</div><div class="bar"><i style="width:93.3%"></i></div><div class="val">0.93</div><div class="dl ">·</div></div><div class="row"><div class="nm">Ужгородський район</div><div class="bar"><i style="width:72.4%"></i></div><div class="val">0.72</div><div class="dl ">·</div></div><div class="row"><div class="nm">Берегівський район</div><div class="bar"><i style="width:58.6%"></i></div><div class="val">0.59</div><div class="dl ">·</div></div><div class="row"><div class="nm">Краматорський район</div><div class="bar"><i style="width:7.6%"></i></div><div class="val">0.08</div><div class="dl ">·</div></div><div class="row"><div class="nm">Бердянський район</div><div class="bar"><i style="width:7.1%"></i></div><div class="val">0.07</div><div class="dl ">·</div></div><div class="row"><div class="nm">Скадовський район</div><div class="bar"><i style="width:6.8%"></i></div><div class="val">0.07</div><div class="dl ">·</div></div><div class="row"><div class="nm">Тячівський район</div><div class="bar"><i style="width:6.7%"></i></div><div class="val">0.07</div><div class="dl ">·</div></div><div class="row"><div class="nm">Мукачівський район</div><div class="bar"><i style="width:6.6%"></i></div><div class="val">0.07</div><div class="dl ">·</div></div></div>
+  <div id="meta">MODEL  demo-wave-v0
+PR-AUC 15/30/60  0.71 / 0.78 / 0.83
+TOP-30 HIT  0.64 / 0.72 / 0.80</div>
+</aside>
+
+<div id="dock" class="glass">
+  <button id="play" aria-label="Play/Pause"><svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z"></path></svg></button>
+  <div class="seg" id="spdSeg"><button>10×</button><button class="on">60×</button><button>300×</button></div>
+  <div id="clock">18:00 UTC</div>
+  <input id="scrub" type="range" min="0" step="0.01" value="0" max="168">
+</div>
+
+<div id="err" hidden=""></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/deck.gl@8.9.36/dist.min.js"></script>
+<script type="module" src="app.js"></script>
+
+
+</body></html>
